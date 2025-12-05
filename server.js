@@ -36,13 +36,16 @@ async function upsertTitleFromOmdb(imdbId, typeHint) {
     }
 
     try {
-        const res = await axios.get('https://www.omdbapi.com/', {
-            params: {
-                i: imdbId,
-                apikey: OMDB_API_KEY,
-                plot: 'short'
-            }
-        })
+        // const res = await axios.get('https://www.omdbapi.com/', {
+        //     params: {
+        //         i: imdbId,
+        //         apikey: OMDB_API_KEY,
+        //         plot: 'short'
+        //     }
+        // })
+
+        let url = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${encodeURIComponent(imdbId)}`;
+        let res = await axios.get(url);
 
         const data = res.data
         if (!data || data.Response === 'False') {
@@ -175,6 +178,8 @@ const builder = new addonBuilder({
 builder.defineStreamHandler(async function (args) {
     console.log('📥 Stream request:', args)
 
+
+
     try {
         // -------------------------
         // 1) Parsear ID de Stremio
@@ -297,8 +302,3 @@ builder.defineStreamHandler(async function (args) {
 
 const PORT = process.env.PORT || 7000
 serveHTTP(builder.getInterface(), { port: PORT })
-
-
-
-
-
