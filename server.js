@@ -22,6 +22,79 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 })
 
 // ========================
+// OMDB helper
+// ========================
+
+const OMDB_API_KEY = process.env.OMDB_API_KEY
+if (!OMDB_API_KEY) {
+    console.warn('⚠️ OMDB_API_KEY no configurado. No se podrá autocompletar títulos desde OMDb.')
+}
+
+async function upsertTitleFromOmdb(imdbId, typeHint) {
+    if (!OMDB_API_KEY) {
+        return null
+    }
+
+    try {
+        const res = await axios.get('https://www.omdbapi.com/', {
+            params: {
+                i: imdbId,
+                apikey: OMDB_API_KEY,
+                plot: 'short'
+            }
+        })
+
+        const data = res.data
+        if (!data || data.Response === 'False') {
+            console.warn('⚠️ OMDb no encontró datos para', imdbId, data && data.Error)
+            return null
+        }
+
+        // Mapear tipo a nuestro enum (movie/series)
+        const omdbType = (data.Type || '').toLowerCase()
+        const type =
+            omdbType === 'series'
+                ? 'series'
+                : omdbType === 'movie'
+                    ? 'movie'
+                    : typeHint // fallback: lo que Stremio dijo
+
+        const payload = {
+            type,
+            imdb_id: imdbId,
+            name: data.Title || imdbId,
+            original_name: null, // OMDb no da "original title" separado
+            year: data.Year ? parseInt(String(data.Year).slice(0, 4), 10) : null,
+            poster_url: data.Poster && data.Poster !== 'N/A' ? data.Poster : null,
+            overview: data.Plot && data.Plot !== 'N/A' ? data.Plot : null,
+            is_enabled: true
+        }
+
+        const { data: insertData, error } = await supabase
+            .from('cxv_title')
+            .insert(payload)
+            .select('id, type, is_enabled')
+            .single()
+
+        if (error) {
+            console.error('❌ Error insertando cxv_title desde OMDb:', error)
+            return null
+        }
+
+        console.log('✅ Título creado en cxv_title desde OMDb:', {
+            imdbId,
+            id: insertData.id,
+            type: insertData.type
+        })
+
+        return insertData
+    } catch (err) {
+        console.error('💥 Error consultando OMDb para', imdbId, err)
+        return null
+    }
+}
+
+// ========================
 // Real-Debrid helper
 // ========================
 
@@ -120,7 +193,7 @@ builder.defineStreamHandler(async function (args) {
         // -------------------------
         // 2) Buscar título en cxv_title
         // -------------------------
-        const { data: title, error: titleError } = await supabase
+        const { data: titleRow, error: titleError } = await supabase
             .from('cxv_title')
             .select('id, type, is_enabled')
             .eq('imdb_id', imdbId)
@@ -132,9 +205,18 @@ builder.defineStreamHandler(async function (args) {
             return { streams: [] }
         }
 
+        // 🔹 ahora usamos una variable mutable "title"
+        let title = titleRow
+
         if (!title) {
             console.log('ℹ️ No se encontró título en cxv_title para imdb_id:', imdbId)
-            return { streams: [] }
+            console.log('ℹ️ Intentando crear título desde OMDb...')
+            title = await upsertTitleFromOmdb(imdbId, args.type)
+
+            if (!title) {
+                // Si tampoco se pudo crear desde OMDb, no hay nada más que hacer
+                return { streams: [] }
+            }
         }
 
         // -------------------------
@@ -215,5 +297,8 @@ builder.defineStreamHandler(async function (args) {
 
 const PORT = process.env.PORT || 7000
 serveHTTP(builder.getInterface(), { port: PORT })
+
+
+
 
 
