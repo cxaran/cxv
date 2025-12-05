@@ -36,13 +36,6 @@ async function upsertTitleFromOmdb(imdbId, typeHint) {
     }
 
     try {
-        // const res = await axios.get('https://www.omdbapi.com/', {
-        //     params: {
-        //         i: imdbId,
-        //         apikey: OMDB_API_KEY,
-        //         plot: 'short'
-        //     }
-        // })
 
         let url = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${encodeURIComponent(imdbId)}`;
         let res = await axios.get(url);
@@ -52,6 +45,8 @@ async function upsertTitleFromOmdb(imdbId, typeHint) {
             console.warn('⚠️ OMDb no encontró datos para', imdbId, data && data.Error)
             return null
         }
+
+        console.log('✅ Título encontrado en OMDb:', data)
 
         // Mapear tipo a nuestro enum (movie/series)
         const omdbType = (data.Type || '').toLowerCase()
@@ -66,7 +61,7 @@ async function upsertTitleFromOmdb(imdbId, typeHint) {
             type,
             imdb_id: imdbId,
             name: data.Title || imdbId,
-            original_name: null, // OMDb no da "original title" separado
+            original_name: data.Title,
             year: data.Year ? parseInt(String(data.Year).slice(0, 4), 10) : null,
             poster_url: data.Poster && data.Poster !== 'N/A' ? data.Poster : null,
             overview: data.Plot && data.Plot !== 'N/A' ? data.Plot : null,
@@ -302,3 +297,6 @@ builder.defineStreamHandler(async function (args) {
 
 const PORT = process.env.PORT || 7000
 serveHTTP(builder.getInterface(), { port: PORT })
+
+
+
