@@ -163,6 +163,24 @@ const builder = new addonBuilder({
     catalogs: [],           // solo streams, sin catálogos
     resources: ['stream'],
     types: ['movie', 'series'],
+    catalogs: [
+        {
+            type: 'movie',
+            id: 'cxv-movies',
+            name: 'CXV Movies',
+            extra: [
+                { name: 'search', isRequired: false } // permite búsqueda
+            ]
+        },
+        {
+            type: 'series',
+            id: 'cxv-series',
+            name: 'CXV Series',
+            extra: [
+                { name: 'search', isRequired: false }
+            ]
+        }
+    ],
     idPrefixes: ['tt']      // trabajamos con IDs IMDb
 })
 
@@ -291,12 +309,93 @@ builder.defineStreamHandler(async function (args) {
     }
 })
 
+
+// ========================
+// Handler de catálogos: solo títulos con streams
+// ========================
+
+builder.defineCatalogHandler(async ({ type, id, extra }) => {
+    console.log('📥 Catalog request:', { type, id, extra })
+
+    const validCatalogs = ['cxv-movies', 'cxv-series']
+    if (!validCatalogs.includes(id)) {
+        return { metas: [] }
+    }
+
+    const search = extra?.search ? String(extra.search).trim() : null
+
+    try {
+        // 1. Consultar títulos habilitados del tipo solicitado
+        let titleQuery = supabase
+            .from('cxv_title')
+            .select('id, imdb_id, type, name, original_name, year, poster_url, overview, is_enabled')
+            .eq('type', type)
+            .eq('is_enabled', true)
+
+        if (search) {
+            titleQuery = titleQuery.ilike('name', `%${search}%`)
+        }
+
+        // Traemos hasta 200 títulos (ajustable)
+        const { data: titles, error: titleErr } = await titleQuery.limit(200)
+
+        if (titleErr) {
+            console.error('❌ Error consultando cxv_title:', titleErr)
+            return { metas: [] }
+        }
+
+        if (!titles || titles.length === 0) {
+            return { metas: [] }
+        }
+
+        // 2. Obtener IDs de títulos que tengan streams habilitados
+        const titleIds = titles.map(t => t.id)
+
+        const { data: streams, error: streamErr } = await supabase
+            .from('cxv_stream')
+            .select('title_id')
+            .in('title_id', titleIds)
+            .eq('is_enabled', true)
+
+        if (streamErr) {
+            console.error('❌ Error consultando cxv_stream:', streamErr)
+            return { metas: [] }
+        }
+
+        if (!streams || streams.length === 0) {
+            return { metas: [] }
+        }
+
+        // IDs que SÍ tienen streams
+        const activeTitleIds = new Set(streams.map(s => s.title_id))
+
+        // 3. Filtrar títulos que tengan streams asociados
+        const filteredTitles = titles.filter(t => activeTitleIds.has(t.id))
+
+        // 4. Convertir a metas de Stremio
+        const metas = filteredTitles.map(row => ({
+            id: row.imdb_id,
+            type: row.type,
+            name: row.name || row.original_name || row.imdb_id,
+            poster: row.poster_url || undefined,
+            description: row.overview || undefined,
+            year: row.year || undefined
+        }))
+
+        console.log(`📦 Catálogo ${id}: ${metas.length} título(s) con streams`)
+        return { metas }
+    } catch (err) {
+        console.error('💥 Error inesperado en catalog handler:', err)
+        return { metas: [] }
+    }
+})
+
+
 // ========================
 // Levantar el servidor HTTP
 // ========================
 
 const PORT = process.env.PORT || 7000
 serveHTTP(builder.getInterface(), { port: PORT })
-
 
 
