@@ -5,20 +5,20 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node api/server.js"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "dotenv": "^16.4.5",
+    "@supabase/supabase-js": "^2.35.1",
+    "axios": "^1.5.1",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "node-fetch": "^3.3.2",
     "openai": "^6.10.0",
     "stremio-addon-sdk": "^1.6.10",
-    "zod": "^3.23.8",
-    "@supabase/supabase-js": "^2.35.1",
-    "axios": "^1.5.1"
+    "zod": "^3.23.8"
   }
 }
