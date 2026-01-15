@@ -9,12 +9,14 @@ const axios = require('axios')
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 
+let configError = null
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.error('❌ Faltan variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY')
-    process.exit(1)
+    configError = 'Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY'
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabase = configError ? null : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
         // No necesitamos sesiones en un addon de Stremio
         persistSession: false
@@ -189,6 +191,10 @@ const builder = new addonBuilder({
 // ========================
 
 builder.defineStreamHandler(async function (args) {
+    if (configError || !supabase) {
+        console.error(configError || 'Supabase client not initialized')
+        return { streams: [] }
+    }
     console.log('📥 Stream request:', args)
 
 
@@ -315,6 +321,10 @@ builder.defineStreamHandler(async function (args) {
 // ========================
 
 builder.defineCatalogHandler(async ({ type, id, extra }) => {
+    if (configError || !supabase) {
+        console.error(configError || 'Supabase client not initialized')
+        return { metas: [] }
+    }
     console.log('📥 Catalog request:', { type, id, extra })
 
     const validCatalogs = ['cxv-movies', 'cxv-series']
@@ -403,4 +413,3 @@ if (require.main === module) {
 }
 
 module.exports = addonInterface
-
